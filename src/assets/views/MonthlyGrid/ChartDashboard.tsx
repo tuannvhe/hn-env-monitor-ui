@@ -1,4 +1,5 @@
-// ChartDashboard.tsx - Hiển thị đủ 4 ca S, C, T, Đ
+// ChartDashboard.tsx - Tự động điều chỉnh khoảng cách trục Y
+
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Select, Spin, Button, DatePicker } from "antd";
 import {
@@ -26,7 +27,7 @@ const SHIFTS = [
   {
     code: "morning",
     label: "Sáng",
-    short: "Sáng",
+    short: "S",
     periodId: 1,
     order: 1,
     color: "#2e7d32",
@@ -34,7 +35,7 @@ const SHIFTS = [
   {
     code: "afternoon",
     label: "Chiều",
-    short: "Chiều",
+    short: "C",
     periodId: 2,
     order: 2,
     color: "#1565c0",
@@ -42,7 +43,7 @@ const SHIFTS = [
   {
     code: "evening",
     label: "Tối",
-    short: "Tối",
+    short: "T",
     periodId: 3,
     order: 3,
     color: "#e65100",
@@ -50,12 +51,17 @@ const SHIFTS = [
   {
     code: "night",
     label: "Đêm",
-    short: "Đêm",
+    short: "Đ",
     periodId: 4,
     order: 4,
     color: "#6a1b9a",
   },
 ];
+
+// Ngưỡng an toàn
+const TEMP_MIN = 18;
+const TEMP_MAX = 25;
+const HUM_MAX = 70;
 
 export default function ChartDashboard() {
   const [locationId, setLocationId] = useState<number | null>(null);
@@ -65,11 +71,15 @@ export default function ChartDashboard() {
   const [loading, setLoading] = useState(false);
   const [metric, setMetric] = useState<"temp" | "hum">("temp");
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
-    dayjs().subtract(13, "day"),
+    dayjs().subtract(31, "day"),
     dayjs(),
   ]);
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstanceRef = useRef<any>(null);
+  const [_, setYAxisRange] = useState<{ min: number; max: number }>({
+    min: 0,
+    max: 0,
+  });
 
   useEffect(() => {
     const load = async () => {
@@ -104,125 +114,142 @@ export default function ChartDashboard() {
     fetchData();
   }, [fetchData]);
 
-  // Hàm tạo dữ liệu cho chart - LUÔN HIỂN THỊ ĐỦ 4 CA
+  // Hàm tạo dữ liệu cho chart - CHỈ HIỂN THỊ CÁC CA ĐÃ KÝ DUYỆT
   const buildChartData = useCallback(() => {
     if (!gridData?.dailyData) {
       return {
         labels: [] as string[],
         values: [] as number[],
-        allValuesForChart: [] as (number | null)[],
         violations: 0,
-        shiftRates: [] as {
-          name: string;
-          value: number;
-          rank: number;
-          color: string;
-        }[],
+        confirmedCount: 0,
+        totalCount: 0,
+        minValue: 0,
+        maxValue: 0,
       };
     }
 
-    const labels: string[] = [];
-    const values: number[] = [];
-    const allValuesForChart: (number | null)[] = [];
+    const confirmedValues: number[] = [];
+    const confirmedLabels: string[] = [];
     const dates = Object.keys(gridData.dailyData).sort();
-    const shiftStats: Record<
-      string,
-      { total: number; count: number; violations: number }
-    > = {};
 
-    // Khởi tạo stats cho từng ca
-    SHIFTS.forEach((shift) => {
-      shiftStats[shift.code] = { total: 0, count: 0, violations: 0 };
-    });
+    let totalCount = 0;
+    let confirmedCount = 0;
+    const violationsList: number[] = [];
 
-    // Duyệt qua từng ngày và từng ca theo đúng thứ tự S, C, T, Đ
+    // Duyệt qua từng ngày và từng ca
     for (const date of dates) {
       const dayData = gridData.dailyData[date];
-      // Duyệt qua tất cả 4 ca theo thứ tự cố định
       for (const shift of SHIFTS) {
         const shiftData = dayData?.shifts?.[shift.code];
-        const val =
-          metric === "temp"
-            ? (shiftData?.temperature ?? null)
-            : (shiftData?.humidity ?? null);
+        const isConfirmed = dayData?.shifts?.[shift.code]?.isConfirmed ?? false;
+        const val = shiftData
+          ? metric === "temp"
+            ? shiftData.temperature
+            : shiftData.humidity
+          : null;
 
-        // Tạo label: "DD/MM S", "DD/MM C", "DD/MM T", "DD/MM Đ"
-        const label = `${dayjs(date).format("DD/MM")} ${shift.short}`;
-        labels.push(label);
-        allValuesForChart.push(val);
+        totalCount++;
 
-        // Thống kê nếu có giá trị
-        if (val !== null) {
-          values.push(val);
-          shiftStats[shift.code].total += val;
-          shiftStats[shift.code].count++;
-          const isViolation =
-            metric === "temp" ? val < 18 || val > 25 : val >= 70;
-          if (isViolation) shiftStats[shift.code].violations++;
+        if (isConfirmed && val !== null) {
+          confirmedCount++;
+          confirmedValues.push(val);
+          confirmedLabels.push(
+            `${dayjs(date).format("DD/MM")} ${shift.short} ✓`,
+          );
+          violationsList.push(val);
         }
       }
     }
 
-    // Tính violations
-    const violations = values.filter((v) =>
-      metric === "temp" ? v < 18 || v > 25 : v > 70,
+    // Tính violations chỉ trên các ca đã ký
+    const violations = violationsList.filter((v) =>
+      metric === "temp" ? v < TEMP_MIN || v > TEMP_MAX : v > HUM_MAX,
     ).length;
 
-    // Tính tỷ lệ đạt cho từng ca
-    const shiftRates: {
-      name: string;
-      value: number;
-      rank: number;
-      color: string;
-    }[] = [];
-    SHIFTS.forEach((shift) => {
-      const stats = shiftStats[shift.code];
-      const totalChecks = stats.count;
-      const passed = totalChecks - stats.violations;
-      const rate =
-        totalChecks > 0 ? Math.round((passed / totalChecks) * 100) : 0;
-      shiftRates.push({
-        name: shift.label,
-        value: rate,
-        rank: 0,
-        color: shift.color,
-      });
-    });
+    // Tìm min/max để tự động điều chỉnh trục Y
+    const minValue =
+      confirmedValues.length > 0 ? Math.min(...confirmedValues) : 0;
+    const maxValue =
+      confirmedValues.length > 0 ? Math.max(...confirmedValues) : 0;
 
-    // Xếp hạng
-    shiftRates.sort((a, b) => b.value - a.value);
-    shiftRates.forEach((item, idx) => {
-      item.rank = idx + 1;
-    });
-
-    return { labels, values, allValuesForChart, violations, shiftRates };
+    return {
+      labels: confirmedLabels,
+      values: confirmedValues,
+      violations,
+      confirmedCount,
+      totalCount,
+      minValue,
+      maxValue,
+    };
   }, [gridData, metric]);
+
+  // Hàm tính toán khoảng cách trục Y tự động
+  const calculateYAxisRange = useCallback(
+    (minVal: number, maxVal: number, isTemp: boolean) => {
+      if (isTemp) {
+        let yMin = 10;
+        let yMax = 35;
+
+        if (minVal < yMin) {
+          yMin = Math.floor(minVal - 2);
+        }
+        if (maxVal > yMax) {
+          yMax = Math.ceil(maxVal + 2);
+        }
+
+        yMin = Math.max(0, yMin);
+        yMax = Math.min(50, yMax);
+
+        return { min: yMin, max: yMax };
+      } else {
+        let yMin = 40;
+        let yMax = 90;
+
+        if (minVal < yMin) {
+          yMin = Math.floor(minVal - 5);
+        }
+        if (maxVal > yMax) {
+          yMax = Math.ceil(maxVal + 5);
+        }
+
+        yMin = Math.max(0, yMin);
+        yMax = Math.min(100, yMax);
+
+        return { min: yMin, max: yMax };
+      }
+    },
+    [],
+  );
 
   // Render chart
   useEffect(() => {
     if (!chartRef.current) return;
 
-    const { labels, allValuesForChart } = buildChartData();
+    const { labels, values, minValue, maxValue } = buildChartData();
     if (labels.length === 0) return;
 
     const isTemp = metric === "temp";
     const unit = isTemp ? "°C" : "%";
     const lineColor = isTemp ? "#378add" : "#1D9E75";
-    const upperLimit = isTemp ? 25 : 70;
-    const lowerLimit = isTemp ? 18 : null;
+    const upperLimit = isTemp ? TEMP_MAX : HUM_MAX;
+    const lowerLimit = isTemp ? TEMP_MIN : null;
 
-    const pointColors = allValuesForChart.map((v) => {
-      if (v === null) return "transparent";
-      if (isTemp && (v < 18 || v > 25)) return "#E24B4A";
-      if (!isTemp && v > 70) return "#E24B4A";
+    // Tính toán khoảng cách trục Y tự động
+    const yRange = calculateYAxisRange(minValue, maxValue, isTemp);
+    
+    // Lưu vào state để hiển thị bên ngoài
+    setYAxisRange(yRange);
+
+    const pointColors = values.map((v) => {
+      if (isTemp && (v < TEMP_MIN || v > TEMP_MAX)) return "#E24B4A";
+      if (!isTemp && v > HUM_MAX) return "#E24B4A";
       return lineColor;
     });
 
-    const pointRadius = allValuesForChart.map((v) => {
-      if (v === null) return 0;
-      if (isTemp && (v < 18 || v > 25)) return 5;
-      if (!isTemp && v > 70) return 5;
-      return 3;
+    const pointRadius = values.map((v) => {
+      if (isTemp && (v < TEMP_MIN || v > TEMP_MAX)) return 5;
+      if (!isTemp && v > HUM_MAX) return 5;
+      return 4;
     });
 
     if (chartInstanceRef.current) {
@@ -235,15 +262,17 @@ export default function ChartDashboard() {
     const datasets: any[] = [
       {
         label: isTemp ? "Nhiệt độ (°C)" : "Độ ẩm (%)",
-        data: allValuesForChart,
+        data: values,
         borderColor: lineColor,
         backgroundColor: "transparent",
         pointBackgroundColor: pointColors,
+        pointBorderColor: "white",
+        pointBorderWidth: 1.5,
         pointRadius,
-        pointHoverRadius: 6,
+        pointHoverRadius: 7,
         borderWidth: 2.5,
-        tension: 0.35,
-        spanGaps: true,
+        tension: 0.3,
+        fill: false,
       },
       {
         label: "Ngưỡng trên",
@@ -284,39 +313,62 @@ export default function ChartDashboard() {
             borderColor: "#e2e8f0",
             borderWidth: 1,
             callbacks: {
-              label: (ctx: any) =>
-                ctx.parsed.y !== null
-                  ? `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}${unit}`
-                  : "Chưa có dữ liệu",
+              label: (ctx: any) => {
+                const value = ctx.parsed.y;
+                const isViolation = isTemp 
+                  ? (value < TEMP_MIN || value > TEMP_MAX) 
+                  : (value > HUM_MAX);
+                const icon = isViolation ? "⚠️" : "✅";
+                return `${icon} ${ctx.dataset.label}: ${value.toFixed(1)}${unit}`;
+              },
             },
           },
         },
         scales: {
           x: {
             ticks: {
-              font: { size: 10, family: "'Inter', sans-serif" },
+              font: { size: 11, family: "'Inter', sans-serif", weight: "500" },
               autoSkip: true,
               maxRotation: 45,
-              color: "#94a3b8",
+              minRotation: 45,
+              color: "#475569",
             },
             grid: { display: false },
+            title: {
+              display: true,
+              text: "📅 Thời gian (Ngày - Ca đã ký duyệt)",
+              color: "#94a3b8",
+              font: { size: 11, weight: "500" },
+              padding: { top: 8 },
+            },
           },
           y: {
-            min: isTemp ? 10 : 40,
-            max: isTemp ? 35 : 90,
+            min: yRange.min,
+            max: yRange.max,
             ticks: {
-              font: { size: 10, family: "'Inter', sans-serif" },
-              color: "#94a3b8",
-              callback: (v: any) => v + unit,
+              font: { size: 11, family: "'Inter', sans-serif" },
+              color: "#475569",
+              callback: (v: any) => `${v}${unit}`,
+              stepSize: isTemp ? 5 : 10,
             },
-            grid: { color: "#f1f5f9", lineWidth: 1 },
+            grid: { color: "#e2e8f0", lineWidth: 1, drawBorder: true },
+            title: {
+              display: true,
+              text: isTemp ? "🌡️ Nhiệt độ" : "💧 Độ ẩm",
+              color: "#94a3b8",
+              font: { size: 11, weight: "500" },
+              padding: { bottom: 8 },
+            },
           },
         },
       },
     });
-  }, [buildChartData, metric]);
+  }, [buildChartData, metric, calculateYAxisRange]);
 
-  const { values, violations } = buildChartData();
+
+
+  const { values, violations,} =
+    buildChartData();
 
   const nonNull = values;
   const avg = nonNull.length
@@ -335,6 +387,7 @@ export default function ChartDashboard() {
     ? Math.round(((nonNull.length - violations) / nonNull.length) * 100)
     : 100;
 
+
   return (
     <div className={styles.container}>
       <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" />
@@ -344,7 +397,7 @@ export default function ChartDashboard() {
         <div className={styles.dashboardHeader}>
           <div className={styles.headerTitle}>
             <h1>Biểu đồ giám sát nhiệt độ / độ ẩm</h1>
-            <p>Real-time temperature & humidity tracking</p>
+            <p>Temperature & humidity tracking (chỉ hiển thị ca đã ký duyệt)</p>
           </div>
           <div className={styles.headerActions}>
             <div className={styles.dateBadge}>
@@ -354,6 +407,7 @@ export default function ChartDashboard() {
           </div>
         </div>
 
+        
         {/* KPI Cards */}
         <div className={styles.kpiGrid}>
           <div className={styles.kpiCard}>
@@ -368,7 +422,7 @@ export default function ChartDashboard() {
               {unit}
             </div>
             <div className={styles.kpiTrend}>
-              <span>Toàn bộ ca</span>
+              <span>Trên các ca đã ký</span>
             </div>
           </div>
 
@@ -386,24 +440,16 @@ export default function ChartDashboard() {
             <div className={styles.kpiTrend}>
               <span
                 className={
-                  isTemp
-                    ? (maxVal ?? 0) > 25
-                      ? styles.trendUp
-                      : ""
-                    : (maxVal ?? 0) >= 70
-                      ? styles.trendUp
-                      : "" // ← Thêm điều kiện cho độ ẩm
+                  isTemp && (maxVal ?? 0) > TEMP_MAX ? styles.trendUp : ""
                 }
               >
-                {
-                  isTemp
-                    ? (maxVal ?? 0) > 25
-                      ? "⚠️ Vượt ngưỡng"
-                      : "Trong ngưỡng"
-                    : (maxVal ?? 0) >= 70
-                      ? "⚠️ Vượt ngưỡng"
-                      : "Trong ngưỡng" // ← Sửa
-                }
+                {isTemp
+                  ? (maxVal ?? 0) > TEMP_MAX
+                    ? `⚠️ Vượt ngưỡng ${TEMP_MAX}${unit}`
+                    : "Trong ngưỡng"
+                  : (maxVal ?? 0) > HUM_MAX
+                    ? `⚠️ Vượt ngưỡng ${HUM_MAX}${unit}`
+                    : "Trong ngưỡng"}
               </span>
             </div>
           </div>
@@ -421,10 +467,12 @@ export default function ChartDashboard() {
             </div>
             <div className={styles.kpiTrend}>
               <span
-                className={isTemp && (minVal ?? 0) < 18 ? styles.trendDown : ""}
+                className={
+                  isTemp && (minVal ?? 0) < TEMP_MIN ? styles.trendDown : ""
+                }
               >
-                {isTemp && (minVal ?? 0) < 18
-                  ? "⚠️ Dưới ngưỡng"
+                {isTemp && (minVal ?? 0) < TEMP_MIN
+                  ? `⚠️ Dưới ngưỡng ${TEMP_MIN}${unit}`
                   : "Trong ngưỡng"}
               </span>
             </div>
@@ -467,8 +515,8 @@ export default function ChartDashboard() {
                         display: "inline-block",
                         borderRadius: 2,
                       }}
-                    ></span>
-                    {isTemp ? "Nhiệt độ" : "Độ ẩm"}
+                    />
+                    {isTemp ? "Nhiệt độ" : "Độ ẩm"} (đã ký)
                   </span>
                   <span className={styles.legendDot}>
                     <span
@@ -478,7 +526,7 @@ export default function ChartDashboard() {
                         borderTop: "2px dashed #E24B4A",
                         display: "inline-block",
                       }}
-                    ></span>
+                    />
                     Ngưỡng cảnh báo
                   </span>
                   <span className={styles.legendDot}>
@@ -490,7 +538,7 @@ export default function ChartDashboard() {
                         borderRadius: "50%",
                         display: "inline-block",
                       }}
-                    ></span>
+                    />
                     Vượt ngưỡng
                   </span>
                 </div>
@@ -523,18 +571,6 @@ export default function ChartDashboard() {
               )}
             </div>
 
-            {/* Hiển thị thông tin số lượng ca để debug */}
-            {/* <div
-              style={{
-                marginTop: 8,
-                fontSize: 11,
-                color: "#94a3b8",
-                textAlign: "center",
-              }}
-            >
-              📊 Hiển thị {SHIFTS.length} ca/ngày:{" "}
-              {SHIFTS.map((s) => s.short).join(", ")}
-            </div> */}
 
             {/* Controls dưới chart */}
             <div
@@ -602,13 +638,13 @@ export default function ChartDashboard() {
             </div>
           </div>
 
-          {/* Right Column - Top Shifts */}
+          {/* Right Column */}
           <div className={styles.sidebar}>
             <div className={styles.statsRow}>
               <div className={styles.miniStatCard}>
-                <div className={styles.miniStatLabel}>Tổng số ca</div>
+                <div className={styles.miniStatLabel}>Tổng số buổi đã ký</div>
                 <div className={styles.miniStatValue}>{nonNull.length}</div>
-                <div className={styles.miniStatUnit}>ca đo</div>
+                <div className={styles.miniStatUnit}>ca</div>
               </div>
               <div className={styles.miniStatCard}>
                 <div className={styles.miniStatLabel}>Số ca cảnh báo</div>
@@ -622,68 +658,21 @@ export default function ChartDashboard() {
               </div>
             </div>
 
-            {/* Top ca đạt chuẩn */}
-            {/* <div className={styles.topListCard}>
-              <div className={styles.topListHeader}>
-                <span className={styles.topListTitle}>
-                  <TrophyOutlined
-                    style={{ marginRight: 8, color: "#fbbf24" }}
-                  />
-                  Top ca đạt chuẩn
-                </span>
-                <span className={styles.topListBadge}>Theo tỷ lệ %</span>
-              </div>
-              {shiftRates && shiftRates.length > 0 ? (
-                shiftRates.map((shift) => (
-                  <div key={shift.name} className={styles.topListItem}>
-                    <div className={styles.topItemRank}>#{shift.rank}</div>
-                    <div className={styles.topItemName}>
-                      <span
-                        style={{
-                          display: "inline-block",
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          background: shift.color,
-                          marginRight: 8,
-                        }}
-                      />
-                      {shift.name}
-                    </div>
-                    <div
-                      className={styles.topItemValue}
-                      style={{ color: shift.color }}
-                    >
-                      {shift.value}%
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div
-                  style={{
-                    padding: "20px",
-                    textAlign: "center",
-                    color: "#94a3b8",
-                  }}
-                >
-                  Chưa có dữ liệu
-                </div>
-              )}
-            </div> */}
-
             {/* Thông tin ngưỡng */}
             <div className={styles.infoCard}>
               <div className={styles.infoTitle}>📋 Ngưỡng cho phép</div>
               <div className={styles.infoRow}>
                 <span>🌡️ Nhiệt độ:</span>
                 <span>
-                  <strong>18°C - 25°C</strong>
+                  <strong>
+                    {TEMP_MIN}°C - {TEMP_MAX}°C
+                  </strong>
                 </span>
               </div>
               <div className={styles.infoRow}>
                 <span>💧 Độ ẩm:</span>
                 <span>
-                  <strong>≤ 70%</strong>
+                  <strong>≤ {HUM_MAX}%</strong>
                 </span>
               </div>
               <div className={styles.infoDivider} />
@@ -695,23 +684,36 @@ export default function ChartDashboard() {
                 <span>🔴 Màu đỏ:</span>
                 <span>Vượt ngưỡng cảnh báo</span>
               </div>
-            </div>
-          </div>
-          <div className="eg-footer">
-            <div className="eg-footer-inner">
-              <span className="eg-footer-bar eg-footer-bar--left" />
-              <span className="eg-footer-icon">⚙</span>
-              <span className="eg-footer-text">
-                Developed by <strong>Viet Nam EA Team</strong>
-              </span>
-              <span className="eg-footer-divider">|</span>
-              <span className="eg-footer-copy">© 2026</span>
-              <span className="eg-footer-icon">⚙</span>
-              <span className="eg-footer-bar eg-footer-bar--right" />
+              <div className={styles.infoDivider} />
+              <div className={styles.infoRow}>
+                <span>✓ Đã ký duyệt:</span>
+                <span>Hiển thị trên biểu đồ</span>
+              </div>
+              <div className={styles.infoRow}>
+                <span>○ Chưa ký:</span>
+                <span>Không hiển thị</span>
+              </div>
             </div>
           </div>
         </div>
+
+        
       </div>
+      {/* Footer */}
+        <div className="eg-footer">
+          <div className="eg-footer-inner">
+            <span className="eg-footer-bar eg-footer-bar--left" />
+            <span className="eg-footer-icon">⚙</span>
+            <span className="eg-footer-text">
+              Developed by <strong>Viet Nam EA Team</strong>
+            </span>
+            <span className="eg-footer-divider">|</span>
+            <span className="eg-footer-copy">© 2026</span>
+            <span className="eg-footer-icon">⚙</span>
+            <span className="eg-footer-bar eg-footer-bar--right" />
+          </div>
+        </div>
     </div>
   );
 }
+

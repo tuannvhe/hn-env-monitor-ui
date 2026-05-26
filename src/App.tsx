@@ -490,7 +490,7 @@ function App() {
     authService.logout();
     setUser(null);
     setIsAuthenticated(false);
-    //message.info("Đã đăng xuất");
+    message.info("Đã đăng xuất");
   };
 
   // Thiết lập timeout tự động logout dựa trên thời gian hết hạn của token
@@ -517,7 +517,7 @@ function App() {
         }, timeUntilExpiry);
       } else {
         // Token đã hết hạn
-        //console.log("Token already expired");
+        console.log("Token already expired");
         handleLogout();
       }
     }
