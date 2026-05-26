@@ -1,0 +1,309 @@
+/* assets/views/login.css */
+
+.login-container {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  overflow: hidden;
+  background: linear-gradient(135deg, #0a1628 0%, #0d2818 40%, #1a1a2e 100%);
+}
+
+/* ── Animated background layers ── */
+.login-bg {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+/* Lưới dạng circuit board */
+.login-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(46, 125, 50, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46, 125, 50, 0.07) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: gridMove 20s linear infinite;
+}
+
+/* Các vòng tròn glow nền */
+.login-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 600px 400px at 20% 30%, rgba(46, 125, 50, 0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 350px at 80% 70%, rgba(21, 101, 192, 0.1) 0%, transparent 70%),
+    radial-gradient(ellipse 400px 300px at 60% 20%, rgba(106, 27, 154, 0.08) 0%, transparent 70%);
+  animation: glowPulse 8s ease-in-out infinite alternate;
+}
+
+@keyframes gridMove {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(40px); }
+}
+
+@keyframes glowPulse {
+  0%   { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+.login-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* ── Floating particles (dùng box-shadow trick) ── */
+.login-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.login-particles::before,
+.login-particles::after {
+  content: '';
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #4caf50;
+  box-shadow:
+    120px  80px 0 rgba(76,175,80,0.6),
+    240px 200px 0 rgba(76,175,80,0.4),
+    380px  60px 0 rgba(76,175,80,0.5),
+    520px 300px 0 rgba(76,175,80,0.3),
+    680px 150px 0 rgba(76,175,80,0.6),
+    800px 400px 0 rgba(76,175,80,0.4),
+    950px 100px 0 rgba(76,175,80,0.5),
+    1100px 250px 0 rgba(76,175,80,0.3),
+    1300px 380px 0 rgba(76,175,80,0.5),
+    200px 500px 0 rgba(33,150,243,0.4),
+    450px 450px 0 rgba(33,150,243,0.3),
+    700px 520px 0 rgba(33,150,243,0.4),
+    1000px 480px 0 rgba(33,150,243,0.3);
+  animation: floatUp 15s linear infinite;
+}
+
+.login-particles::after {
+  width: 2px;
+  height: 2px;
+  box-shadow:
+    60px  120px 0 rgba(76,175,80,0.4),
+    160px 350px 0 rgba(76,175,80,0.3),
+    300px 420px 0 rgba(76,175,80,0.5),
+    600px  80px 0 rgba(76,175,80,0.4),
+    750px 300px 0 rgba(76,175,80,0.3),
+    900px 180px 0 rgba(76,175,80,0.5),
+    1050px 350px 0 rgba(76,175,80,0.4),
+    1200px 120px 0 rgba(76,175,80,0.3);
+  animation: floatUp 20s linear infinite reverse;
+}
+
+@keyframes floatUp {
+  0%   { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(-100px) rotate(360deg); opacity: 0; }
+}
+
+/* ── Login Card ── */
+.login-card {
+  position: relative;
+  z-index: 1;
+  width: 440px;
+  border-radius: 24px;
+  box-shadow:
+    0 32px 64px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255,255,255,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.15);
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(20px);
+  border: none;
+  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+/* Accent bar trên cùng */
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #1a472a, #2e7d32, #4caf50, #2e7d32, #1a472a);
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(40px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Header ── */
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+  padding-top: 8px;
+}
+
+.login-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.logo-icon {
+  font-size: 48px;
+  filter: drop-shadow(0 4px 12px rgba(46,125,50,0.4));
+  animation: pulse 3s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1);    filter: drop-shadow(0 4px 12px rgba(46,125,50,0.4)); }
+  50%       { transform: scale(1.08); filter: drop-shadow(0 6px 20px rgba(46,125,50,0.6)); }
+}
+
+.logo-text {
+  font-size: 26px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #0d2818 0%, #1a472a 50%, #2e7d32 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.5px;
+}
+
+.login-header h2 {
+  margin: 0;
+  font-size: 17px;
+  color: #1a1a2e;
+  font-weight: 600;
+}
+
+.login-header p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #888;
+  letter-spacing: 0.3px;
+}
+
+/* ── Form inputs ── */
+.login-card .ant-form-item {
+  margin-bottom: 18px;
+}
+
+.login-card .ant-input-affix-wrapper,
+.login-card .ant-input {
+  border-radius: 12px;
+  border: 1.5px solid #e8e8e8;
+  background: #fafafa;
+  transition: all 0.25s;
+  font-size: 14px;
+}
+
+.login-card .ant-input-affix-wrapper:hover,
+.login-card .ant-input:hover {
+  border-color: #4caf50;
+  background: #fff;
+}
+
+.login-card .ant-input-affix-wrapper:focus,
+.login-card .ant-input:focus,
+.login-card .ant-input-affix-wrapper-focused {
+  border-color: #2e7d32;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15);
+}
+
+/* ── Submit button ── */
+.login-card .ant-btn-primary {
+  background: linear-gradient(135deg, #1a472a 0%, #2e7d32 50%, #388e3c 100%);
+  border: none;
+  height: 50px;
+  font-weight: 600;
+  border-radius: 12px;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 16px rgba(46, 125, 50, 0.35);
+  transition: all 0.25s;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-card .ant-btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.login-card .ant-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(46, 125, 50, 0.45);
+  background: linear-gradient(135deg, #0d2818 0%, #1a472a 50%, #2e7d32 100%);
+}
+
+.login-card .ant-btn-primary:hover::after {
+  opacity: 1;
+}
+
+.login-card .ant-btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.3);
+}
+
+/* ── Footer ── */
+.login-footer {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 11px;
+  color: #aaa;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.login-demo {
+  color: #2e7d32;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* ── App loading ── */F
+.app-loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #0a1628 0%, #0d2818 50%, #1a1a2e 100%);
+  z-index: 9999;
+}
+
+/* ── Responsive ── */
+@media (max-width: 480px) {
+  .login-card {
+    width: 92%;
+    border-radius: 18px;
+  }
+  .logo-icon  { font-size: 36px; }
+  .logo-text  { font-size: 20px; }
+  .login-header h2 { font-size: 15px; }
+}
